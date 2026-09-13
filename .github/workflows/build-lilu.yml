@@ -2,62 +2,38 @@ name: CI
 
 on:
   push:
+    branches: [ master, main, origin ]
   pull_request:
+    branches: [ master, main, origin ]
   workflow_dispatch:
-  release:
-    types: [published]
-
-env:
-  PROJECT_TYPE: KEXT
-  ACID32: 1
 
 jobs:
   build:
-    name: Build
+    name: Build Patched Lilu
     runs-on: macos-latest
-    env:
-      JOB_TYPE: BUILD
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
+      - name: Checkout Lilu Code
+        uses: actions/checkout@v4
+
+      - name: Fetch MacKernelSDK Headers
+        uses: actions/checkout@v4
         with:
           repository: acidanthera/MacKernelSDK
           path: MacKernelSDK
-      - name: CI Bootstrap
+
+      - name: Compile Release Kext
         run: |
-          src=$(/usr/bin/curl -Lfs https://raw.githubusercontent.com/acidanthera/ocbuild/master/ci-bootstrap.sh) && eval "$src" || exit 1
+          xcodebuild \
+            -project "Lilu.xcodeproj" \
+            -scheme "Lilu" \
+            -configuration Release \
+            -arch x86_64 \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
 
-      - run: xcodebuild -jobs 1 -arch x86_64 -arch ACID32 -configuration Debug CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
-      - run: xcodebuild -jobs 1 -arch x86_64 -arch ACID32 -configuration Release CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
-
-      - name: Upload to Artifacts
+      - name: Zip and Upload Finished Kext
         uses: actions/upload-artifact@v4
         with:
-          name: Artifacts
-          path: build/*/*.zip
-      - name: Upload to Release
-        if: github.event_name == 'release'
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: build/*/*.zip
-          tag: ${{ github.ref }}
-          file_glob: true
-
-  analyze-clang:
-    name: Analyze Clang
-    runs-on: macos-latest
-    env:
-      JOB_TYPE: ANALYZE
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
-        with:
-          repository: acidanthera/MacKernelSDK
-          path: MacKernelSDK
-      - name: CI Bootstrap
-        run: |
-          src=$(/usr/bin/curl -Lfs https://raw.githubusercontent.com/acidanthera/ocbuild/master/ci-bootstrap.sh) && eval "$src" || exit 1
-
-      - run: xcodebuild analyze -quiet -scheme Lilu -configuration Debug CLANG_ANALYZER_OUTPUT=plist-html CLANG_ANALYZER_OUTPUT_DIR="$(pwd)/clang-analyze" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" && [ "$(find clang-analyze -name "*.html")" = "" ]
-      - run: xcodebuild analyze -quiet -scheme Lilu -configuration Release CLANG_ANALYZER_OUTPUT=plist-html CLANG_ANALYZER_OUTPUT_DIR="$(pwd)/clang-analyze" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" && [ "$(find clang-analyze -name "*.html")" = "" ]
+          name: Patched-Lilu-Kext
+          path: build/Release/*.kext
