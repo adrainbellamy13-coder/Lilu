@@ -1,0 +1,60 @@
+name: Build AMD R4 Custom Lilu and LegacyRed Bundle
+
+on:
+  workflow_dispatch: # Gives you the manual gray 'Run workflow' drop-down button
+  push:
+    branches: [ master, main, origin ]
+  pull_request:
+    branches: [ master, main, origin ]
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+    - name: Checkout Custom Lilu Code
+      uses: actions/checkout@v4
+
+    - name: Fetch MacKernelSDK Headers
+      run: |
+        git clone https://github.com/acidanthera/MacKernelSDK.git
+
+    - name: Compile Patched Lilu Kext
+      run: |
+        xcodebuild \
+          -project "Lilu.xcodeproj" \
+          -configuration Release \
+          CODE_SIGNING_ALLOWED=NO \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGN_IDENTITY=""
+
+    - name: Checkout LegacyRed Repo
+      uses: actions/checkout@v4
+      with:
+        repository: 'adrainbellamy13-coder/LegacyRed'
+        path: 'LegacyRed-src'
+        submodules: 'recursive'
+
+    - name: Link Compiled Lilu to LegacyRed Workspace
+      run: |
+        # Inject your freshly compiled Lilu dependency so LegacyRed can find it
+        cp -R build/Release/Lilu.kext ./LegacyRed-src/
+
+    - name: Compile LegacyRed Graphics Driver
+      run: |
+        cd LegacyRed-src
+        xcodebuild \
+          -project "LegacyRed.xcodeproj" \
+          -target "LegacyRed" \
+          -configuration Release \
+          CODE_SIGNING_ALLOWED=NO \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGN_IDENTITY=""
+
+    - name: Upload Finished AMD Radeon R4 Graphic Bundle
+      uses: actions/upload-artifact@v4
+      with:
+        name: AMD-Radeon-R4-Graphics-Bundle
+        path: |
+          build/Release/*.kext
+          LegacyRed-src/build/Release/*.kext
